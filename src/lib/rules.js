@@ -25,12 +25,24 @@ export const newDay = (date) => ({ date, marks: {}, times: {}, toggles: {}, note
 const FIELD = { check: 'marks', time: 'times', toggle: 'toggles' }
 const hasField = (d, it) => !!d?.[FIELD[it.type]] && Object.prototype.hasOwnProperty.call(d[FIELD[it.type]], it.id)
 
+// 그날 값을 입력했는지 (빈 값 null/false는 입력 안 함)
+export const hasValue = (d, it) => {
+  const v = d?.[FIELD[it.type]]?.[it.id]
+  return it.type === 'toggle' ? v === true : v != null && v !== ''
+}
+
 // 그날 화면에 나올 항목 (설정 순서)
+// 끝난 날: 기록에 필드가 있는 항목
+// 오늘(마감 전): 지금 설정의 할 일 + 그날 이미 값을 입력한 항목 (입력 후 삭제해도 마감 후와 똑같이 보이도록)
 export function itemsOn(settings, days, date) {
   const d = days[date]
   if (d?.closed) return settings.items.filter((it) => hasField(d, it))
-  return live(settings).filter((it) => onDay(it, date))
+  return settings.items.filter((it) => (!it.archived && onDay(it, date)) || hasValue(d, it))
 }
+
+// 이름이 같은 삭제한 항목 (다시 등록할 때 되살리기용)
+export const archivedByName = (settings, name) =>
+  settings.items.find((it) => it.archived && it.name.trim() === name.trim())
 
 // 하루 마감: 그날 할 일 중 입력하지 않은 것을 빈 값으로 채운다 (기록은 그대로)
 export function closeDay(settings, day, date) {
@@ -145,6 +157,7 @@ export function weeksKept(settings, days, today) {
 
 export const hasRecords = (days, id) =>
   Object.values(days).some((d) => d.marks?.[id] || d.times?.[id] || d.toggles?.[id])
+
 
 export function summary(it) {
   if (it.type === 'check')

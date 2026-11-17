@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { nightMin, normHM, weekStart } from './dates.js'
-import { closeDay, daySum, itemsOn, migrateDay, newDay, pendingCloses, timeOk, timeText, warnFor, weeksKept } from './rules.js'
+import { archivedByName, closeDay, daySum, itemsOn, migrateDay, newDay, pendingCloses, timeOk, timeText, warnFor, weeksKept } from './rules.js'
 
 // 테스트용 설정: 2026-11-16(월) 시작
 const settings = () => ({
@@ -99,6 +99,31 @@ describe('그날 할 일 목록 (필드명:값 저장)', () => {
     const s = settings()
     const days = { '2026-11-16': closeDay(s, undefined, '2026-11-16'), '2026-11-17': day(s, '2026-11-17') }
     expect(pendingCloses(s, days, '2026-11-19').map((d) => d.date)).toEqual(['2026-11-17', '2026-11-18'])
+  })
+  it('삭제한 항목: 오늘 이후에는 안 나오고, 끝난 날은 기록대로 나온다', () => {
+    const s = settings()
+    const days = { '2026-11-16': closeDay(s, day(s, '2026-11-16', (x) => { x.marks.run = 'O' }), '2026-11-16') }
+    s.items[1].archived = true // 운동 삭제
+    expect(ids(itemsOn(s, days, '2026-11-16'))).toContain('run')
+    expect(ids(itemsOn(s, days, '2026-11-18'))).not.toContain('run')
+    expect(ids(itemsOn(s, days, '2026-11-20'))).not.toContain('run')
+  })
+  it('오늘 값을 입력한 뒤 삭제해도 오늘 목록에 남고, 마감 후에도 같다', () => {
+    const s = settings()
+    const days = { '2026-11-16': day(s, '2026-11-16', (x) => { x.marks.run = 'O' }) }
+    s.items[1].archived = true
+    expect(ids(itemsOn(s, days, '2026-11-16'))).toContain('run')
+    days['2026-11-16'] = closeDay(s, days['2026-11-16'], '2026-11-16')
+    expect(ids(itemsOn(s, days, '2026-11-16'))).toContain('run')
+    expect(daySum(s, days, '2026-11-16').n).toBe(2) // 운동 O + 야식 안 먹음
+  })
+  it('되살리면 같은 id라 지난 기록과 이어지고 오늘 목록에 다시 나온다', () => {
+    const s = settings()
+    s.items[1].archived = true
+    expect(archivedByName(s, ' 운동 ')?.id).toBe('run')
+    delete s.items[1].archived
+    expect(ids(itemsOn(s, {}, '2026-11-18'))).toContain('run')
+    expect(archivedByName(s, '운동')).toBeUndefined()
   })
   it('예전 형식(scheduled 목록)은 필드로 바꾼다', () => {
     const s = settings()

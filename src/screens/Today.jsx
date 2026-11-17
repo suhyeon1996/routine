@@ -82,7 +82,7 @@ function CheckRow({ it, date, value, onMark }) {
         <div className="tt">
           {sl.time && <span className="tm0">{sl.time}</span>}
           {sl.min ? <span className="du">({sl.min}분)</span> : null}
-          {it.name}
+          {it.name}{it.archived && <span className="del">(삭제)</span>}
         </div>
         <div className="sub">{sl.note}{sl.note && end ? ' · ' : ''}{end ? `${sl.time}~${end}` : ''}</div>
       </div>
@@ -99,7 +99,7 @@ function TimeRow({ it, value, onPress }) {
   const ok = timeOk(it, value)
   return (
     <div className="lr">
-      <div className="tx"><div className="tt">{it.name}</div><div className="sub">{goalText(it)}</div></div>
+      <div className="tx"><div className="tt">{it.name}{it.archived && <span className="del">(삭제)</span>}</div><div className="sub">{goalText(it)}</div></div>
       <button className={`tmb ${value ? 'set' : ''}`} onClick={onPress}>
         {value ? <>{timeText(it, value)}{ok !== null && <span className={ok ? 'ok' : 'bad'}>{ok ? '✓' : '✗'}</span>}</> : '눌러서 입력'}
       </button>
@@ -110,7 +110,7 @@ function TimeRow({ it, value, onPress }) {
 function ToggleRow({ it, on, onToggle }) {
   return (
     <div className="lr">
-      <div className="tx"><div className="tt">{it.name}</div><div className="sub">{SCORE[it.score || 'none']}</div></div>
+      <div className="tx"><div className="tt">{it.name}{it.archived && <span className="del">(삭제)</span>}</div><div className="sub">{SCORE[it.score || 'none']}</div></div>
       <button className={`tg ${on ? 'on' : ''} ${it.score === 'off' ? 'neg' : ''}`}
         onClick={onToggle} role="switch" aria-checked={on} aria-label={it.name} />
     </div>

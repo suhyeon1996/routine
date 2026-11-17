@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DOW, WEEK_ORDER } from '../lib/dates.js'
-import { hasRecords, live, summary, TYPES } from '../lib/rules.js'
+import { archivedByName, hasRecords, live, summary, TYPES } from '../lib/rules.js'
 import { blankItem } from '../lib/defaults.js'
 import TimeField from '../components/TimeField.jsx'
 import { useUI } from '../ui.jsx'
@@ -26,15 +26,37 @@ export default function Settings({ settings, days, updateSettings }) {
     if (n) edit(it.id, (x) => { x.name = n })
   }
   const remove = async (it) => {
-    if (await ui.confirm(`'${it.name}'을(를) 삭제할까요? 지난 기록은 남아요.`, '삭제')) edit(it.id, (x) => { x.archived = true })
+    if (await ui.confirm(`'${it.name}'을(를) 삭제할까요? 지난 기록은 남고, 아래 '삭제한 항목'에서 되살릴 수 있어요.`, '삭제')) {
+      edit(it.id, (x) => { x.archived = true })
+    }
   }
-  const add = () => ui.open(<AddSheet onCancel={ui.close} onAdd={(name, type) => {
+  // 되살리기: 삭제 표시만 지운다 (같은 id라 지난 기록과 이어지고, 원래 자리로 돌아감)
+  const restore = (it) => {
+    edit(it.id, (x) => { delete x.archived })
+    ui.toast(`${it.name}을(를) 되살렸어요`)
+  }
+  const create = (name, type) => {
     const it = blankItem('i' + Date.now().toString(36), name, type)
     updateSettings((s) => { s.items.push(it) })
     setOpen((o) => ({ ...o, [it.id]: true }))
-    ui.close()
     ui.toast(`${name} 추가됨 · 요일과 시간을 정해요`)
+  }
+  const add = () => ui.open(<AddSheet onCancel={ui.close} onAdd={(name, type) => {
+    const old = archivedByName(settings, name)
+    if (!old) { ui.close(); create(name, type); return }
+    // 삭제한 항목과 이름이 같으면 되살릴지 묻는다
+    ui.open(
+      <>
+        <div className="sh-msg"><b>'{old.name}'</b>은(는) 전에 삭제한 항목이에요.<br /><span className="small muted">되살리면 지난 기록과 이어지고, 설정도 예전대로 돌아와요.</span></div>
+        <div className="sh-btns">
+          <button className="big ghost" onClick={() => { ui.close(); create(name, type) }}>새 항목으로 만들기</button>
+          <button className="big" onClick={() => { ui.close(); restore(old) }}>예전 항목 되살리기</button>
+        </div>
+      </>,
+    )
   }} />)
+  const archived = settings.items.filter((it) => it.archived)
+  const [showArchived, setShowArchived] = useState(false)
 
   const toggleDay = (it, d, si) => edit(it.id, (x) => {
     if (si === undefined) {
@@ -153,6 +175,22 @@ export default function Settings({ settings, days, updateSettings }) {
         ))}
         <button className="add" onClick={add}>+ 항목 추가</button>
       </div>
+      {archived.length > 0 && (
+        <div className="sec">
+          <button className="more" onClick={() => setShowArchived(!showArchived)}>
+            {showArchived ? '삭제한 항목 접기 ▲' : `삭제한 항목 ${archived.length}개 보기 ▼`}
+          </button>
+          {showArchived && archived.map((it) => (
+            <div key={it.id} className="it archived">
+              <div className="ithead">
+                <span className="nm"><span className={`badge ${it.type}`}>{TYPES[it.type].name}</span><span>{it.name}</span></span>
+                <button className="restore" onClick={() => restore(it)}>되살리기</button>
+              </div>
+              <div className="summary">{summary(it)}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="small muted" style={{ padding: '0 4px' }}>한 요일은 한 줄에만 들어가요. 삭제한 항목은 숨겨지고 지난 기록은 남아요. 설정은 이 휴대폰에만 저장돼요.</div>
     </>
   )

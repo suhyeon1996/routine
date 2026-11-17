@@ -33,7 +33,7 @@ export default function Week({ settings, days, today, wk, setWk, openDay }) {
       if (ok) n++
       return <Cell key={d} d={d} cls={`hm ${ok === null ? '' : ok ? 'cO' : 'cX'}`}>{timeText(it, v)}</Cell>
     })
-    return <tr key={it.id}><td className="nm">{it.name}</td>{cells}<td className="tot">{counts(it) ? `${n}/${t}` : '-'}</td></tr>
+    return <tr key={it.id}><td className="nm">{it.name}{it.archived && <><br /><span className="del">(삭제)</span></>}</td>{cells}<td className="tot">{counts(it) ? `${n}/${t}` : '-'}</td></tr>
   }
 
   const toggleRow = (it) => {
@@ -53,7 +53,7 @@ export default function Week({ settings, days, today, wk, setWk, openDay }) {
     })
     return (
       <tr key={it.id}>
-        <td className={`nm ${sc ? '' : 'muted'}`}>{it.name.replace(/\s*\(.*\)/, '')}</td>{cells}
+        <td className={`nm ${sc ? '' : 'muted'}`}>{it.name.replace(/\s*\(.*\)/, '')}{it.archived && <><br /><span className="del">(삭제)</span></>}</td>{cells}
         <td className="tot">{sc ? `${n}/${t}` : `${c}회`}</td>
       </tr>
     )
