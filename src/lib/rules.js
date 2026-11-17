@@ -13,13 +13,67 @@ export const itemById = (settings, id) => settings.items.find((i) => i.id === id
 export const slotFor = (it, date) => (it.slots || []).find((s) => s.days.includes(dow(date)))
 export const onDay = (it, date) => (it.type === 'check' ? !!slotFor(it, date) : (it.days || []).includes(dow(date)))
 
-// 그날 할 일(체크·시간 입력). 하루 기록을 처음 저장할 때 고정해서 설정이 바뀌어도 지난 날은 그대로
-export const defaultSchedule = (settings, date) =>
-  live(settings).filter((it) => it.type !== 'toggle' && onDay(it, date)).map((i) => i.id)
-export const scheduled = (settings, days, date) => days[date]?.scheduled ?? defaultSchedule(settings, date)
-export const newDay = (settings, date) => ({
-  date, scheduled: defaultSchedule(settings, date), marks: {}, times: {}, toggles: {}, note: '',
-})
+// 하루 기록: 항목 id를 필드명으로 값만 저장한다
+//   marks   { id: "O" | "△" | "X" | null }   체크
+//   times   { id: "HH:MM" | null }            시간 입력
+//   toggles { id: true | false }              켜기/끄기
+// 오늘(과 아직 마감하지 않은 날)은 그날 할 일을 지금 설정으로 계산한다.
+// 끝난 날은 마감할 때 입력하지 않은 할 일을 빈 값(null/false)으로 채워 두므로,
+// 기록에 필드가 있으면 그날 할 일, 없으면 그날 할 일이 아님('-')이다.
+export const newDay = (date) => ({ date, marks: {}, times: {}, toggles: {}, note: '' })
+
+const FIELD = { check: 'marks', time: 'times', toggle: 'toggles' }
+const hasField = (d, it) => !!d?.[FIELD[it.type]] && Object.prototype.hasOwnProperty.call(d[FIELD[it.type]], it.id)
+
+// 그날 화면에 나올 항목 (설정 순서)
+export function itemsOn(settings, days, date) {
+  const d = days[date]
+  if (d?.closed) return settings.items.filter((it) => hasField(d, it))
+  return live(settings).filter((it) => onDay(it, date))
+}
+
+// 하루 마감: 그날 할 일 중 입력하지 않은 것을 빈 값으로 채운다 (기록은 그대로)
+export function closeDay(settings, day, date) {
+  const d = structuredClone(day ?? newDay(date))
+  live(settings).filter((it) => onDay(it, date)).forEach((it) => {
+    const f = FIELD[it.type]
+    d[f] = d[f] || {}
+    if (!(it.id in d[f])) d[f][it.id] = it.type === 'toggle' ? false : null
+  })
+  d.closed = true
+  return d
+}
+
+// 처음 쓴 날부터 어제까지, 아직 마감하지 않은 날을 마감한다 (기록이 없는 날도 빈 기록으로)
+export function pendingCloses(settings, days, today) {
+  const out = []
+  for (let d = settings.startDate; d < today; d = addDays(d, 1)) {
+    if (!days[d]?.closed) out.push(closeDay(settings, days[d], d))
+  }
+  return out
+}
+
+// 예전 형식(버전 1: scheduled 목록) 기록을 새 형식으로 바꾼다
+export function migrateDay(settings, day, today) {
+  if (!day || !Array.isArray(day.scheduled)) return day
+  const d = structuredClone(day)
+  d.marks = d.marks || {}; d.times = d.times || {}; d.toggles = d.toggles || {}
+  for (const id of d.scheduled) {
+    const it = itemById(settings, id)
+    if (!it || it.type === 'toggle') continue
+    const f = FIELD[it.type]
+    if (!(id in d[f])) d[f][id] = null
+  }
+  delete d.scheduled
+  for (const k of Object.keys(d.marks)) if (d.marks[k] === undefined) d.marks[k] = null
+  if (d.date < today) {
+    live(settings).filter((it) => it.type === 'toggle' && onDay(it, d.date)).forEach((it) => {
+      if (!(it.id in d.toggles)) d.toggles[it.id] = false
+    })
+    d.closed = true
+  }
+  return d
+}
 
 // 시간 입력 항목의 달성 여부. 목표가 없거나 값이 없으면 null
 export function timeOk(it, v) {
@@ -49,14 +103,9 @@ export function achieved(it, d) {
   return it.score === 'on' ? !!d.toggles?.[it.id] : !d.toggles?.[it.id]
 }
 
-const scoredToggles = (settings, date) => live(settings).filter((it) => it.type === 'toggle' && counts(it) && onDay(it, date))
-
 // 하루 합계. 아무것도 입력하지 않은 날은 0 ('끄면 달성' 항목도 점수 없음)
 export function daySum(settings, days, date) {
-  const list = scheduled(settings, days, date)
-    .map((id) => itemById(settings, id))
-    .filter((it) => it && counts(it))
-    .concat(scoredToggles(settings, date))
+  const list = itemsOn(settings, days, date).filter(counts)
   const d = days[date]
   let n = 0
   if (touched(d)) list.forEach((it) => { if (achieved(it, d)) n++ })

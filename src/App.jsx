@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { addDays, today as todayYmd, weekStart } from './lib/dates.js'
-import { newDay } from './lib/rules.js'
+import { migrateDay, newDay, pendingCloses } from './lib/rules.js'
 import { createSettings } from './lib/defaults.js'
 import * as store from './lib/storage.js'
 import { useUI } from './ui.jsx'
@@ -36,7 +36,18 @@ export default function App() {
       await store.saveSettings(s)
     }
     const all = await store.getAllDays()
-    const map = Object.fromEntries(all.map((d) => [d.date, d]))
+    const t = todayYmd()
+    const map = {}
+    const changed = []
+    // 예전 형식 기록은 새 형식으로 바꾼다
+    for (const d of all) {
+      const m = migrateDay(s, d, t)
+      map[m.date] = m
+      if (m !== d) changed.push(m)
+    }
+    // 끝난 날 마감: 입력하지 않은 할 일을 빈 값으로 채워 둔다
+    for (const d of pendingCloses(s, map, t)) { map[d.date] = d; changed.push(d) }
+    await Promise.all(changed.map((d) => store.saveDay(d)))
     settingsRef.current = s
     daysRef.current = map
     setSettings(s)
@@ -54,7 +65,18 @@ export default function App() {
       if (document.visibilityState !== 'visible') return
       const t = todayYmd()
       setToday((prev) => {
-        if (prev !== t) { setCur(t); setWk(weekStart(t)) }
+        if (prev !== t) {
+          setCur(t); setWk(weekStart(t))
+          // 날짜가 바뀌었으면 어제까지 마감
+          if (settingsRef.current) {
+            const closed = pendingCloses(settingsRef.current, daysRef.current, t)
+            if (closed.length) {
+              daysRef.current = { ...daysRef.current, ...Object.fromEntries(closed.map((d) => [d.date, d])) }
+              setDays(daysRef.current)
+              closed.forEach((d) => store.saveDay(d))
+            }
+          }
+        }
         return t
       })
     }
@@ -64,9 +86,9 @@ export default function App() {
 
   const saveFailed = (e) => ui.toast('저장하지 못했어요: ' + e.message)
 
-  // 하루 기록 바꾸기 (처음 저장할 때 그날 할 일 목록이 함께 고정된다)
+  // 하루 기록 바꾸기 (입력한 값만 필드로 저장)
   const updateDay = useCallback((date, fn) => {
-    const base = daysRef.current[date] ?? newDay(settingsRef.current, date)
+    const base = daysRef.current[date] ?? newDay(date)
     const d = structuredClone(base)
     fn(d)
     daysRef.current = { ...daysRef.current, [date]: d }

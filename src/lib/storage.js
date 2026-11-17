@@ -40,7 +40,8 @@ export const getDays = (fromDate, toDate) =>
 
 // 백업 파일 형식
 export const BACKUP_APP = 'routine'
-export const BACKUP_VERSION = 1
+// 버전 2: 하루 기록은 필드(항목 id)와 값만. 버전 1(scheduled 목록) 백업도 불러올 수 있고, 앱을 열 때 새 형식으로 바뀐다
+export const BACKUP_VERSION = 2
 
 export async function exportAll() {
   const [settings, days] = await Promise.all([getSettings(), getAllDays()])
@@ -48,7 +49,7 @@ export async function exportAll() {
 }
 
 export function isBackup(data) {
-  return !!data && data.app === BACKUP_APP && data.version === BACKUP_VERSION &&
+  return !!data && data.app === BACKUP_APP && (data.version === 1 || data.version === BACKUP_VERSION) &&
     !!data.settings && Array.isArray(data.settings.items) && Array.isArray(data.days)
 }
 

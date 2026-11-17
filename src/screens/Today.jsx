@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addDays, fromMin, label, normHM, nowHM, toMin } from '../lib/dates.js'
-import { daySum, goalText, live, onDay, SCORE, scheduled, slotFor, summary, timeOk, timeText, warnFor } from '../lib/rules.js'
+import { daySum, goalText, itemsOn, live, SCORE, slotFor, summary, timeOk, timeText, warnFor } from '../lib/rules.js'
 import { useUI } from '../ui.jsx'
 
 const MARKS = [['O', 'O'], ['△', 'T'], ['X', 'X']]
@@ -9,17 +9,16 @@ export default function Today({ settings, days, today, date, setDate, updateDay 
   const ui = useUI()
   const [showOff, setShowOff] = useState(false)
   const d = days[date]
-  // 설정 순서 그대로 한 목록. 체크·시간 입력은 그날 고정된 목록, 켜기/끄기는 요일로
-  const ids = scheduled(settings, days, date)
-  const shown = (it) => (it.type === 'toggle' ? !it.archived && onDay(it, date) : ids.includes(it.id))
-  const items = settings.items.filter(shown)
-  const off = live(settings).filter((it) => !shown(it))
+  // 설정 순서 그대로 한 목록. 오늘은 지금 설정으로, 끝난 날은 기록에 있는 필드로
+  const items = itemsOn(settings, days, date)
+  const off = live(settings).filter((it) => !items.includes(it))
   const s = daySum(settings, days, date)
   const isToday = date === today
 
-  const mark = (id, v) => updateDay(date, (x) => { if (x.marks[id] === v) delete x.marks[id]; else x.marks[id] = v })
-  const toggle = (id) => updateDay(date, (x) => { if (x.toggles[id]) delete x.toggles[id]; else x.toggles[id] = true })
-  const setTime = (id, v) => updateDay(date, (x) => { if (v) x.times[id] = v; else delete x.times[id] })
+  // 지울 때는 필드를 없애지 않고 빈 값으로 둔다 (끝난 날의 할 일 목록이 유지되도록)
+  const mark = (id, v) => updateDay(date, (x) => { x.marks[id] = x.marks[id] === v ? null : v })
+  const toggle = (id) => updateDay(date, (x) => { x.toggles[id] = !x.toggles[id] })
+  const setTime = (id, v) => updateDay(date, (x) => { x.times[id] = v || null })
 
   const pressTime = (it) => {
     const v = d?.times?.[it.id]

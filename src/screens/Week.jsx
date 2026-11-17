@@ -1,13 +1,14 @@
 import { addDays, DOW, dow, parseYmd, short } from '../lib/dates.js'
-import { achieved, counts, daySum, isCounted, onDay, scheduled, timeOk, timeText, touched, weeksKept } from '../lib/rules.js'
+import { achieved, counts, daySum, isCounted, itemsOn, timeOk, timeText, touched, weeksKept } from '../lib/rules.js'
 
 export default function Week({ settings, days, today, wk, setWk, openDay }) {
   const dates = [...Array(7)].map((_, i) => addDays(wk, i))
   const blank = (d) => !isCounted(settings, d, today)
-  const ids = new Set()
-  dates.forEach((d) => scheduled(settings, days, d).forEach((id) => ids.add(id)))
-  // 설정 순서 그대로 한 표. 삭제한 항목은 이번 주에 기록이 있을 때만
-  const rowItems = settings.items.filter((it) => !it.archived || (it.type !== 'toggle' && ids.has(it.id)))
+  // 날짜별 그날 할 일 (오늘 이후는 지금 설정, 끝난 날은 기록의 필드)
+  const onMap = Object.fromEntries(dates.map((d) => [d, new Set(itemsOn(settings, days, d).map((it) => it.id))]))
+  const isOn = (it, d) => onMap[d].has(it.id)
+  // 설정 순서 그대로 한 표. 삭제한 항목은 이번 주에 그날 할 일이었던 날이 있을 때만
+  const rowItems = settings.items.filter((it) => !it.archived || dates.some((d) => isOn(it, d)))
 
   const Cell = ({ d, cls, children }) => (
     <td className={`c ${cls || ''}`} onClick={() => openDay(d)}>{children}</td>
@@ -16,7 +17,7 @@ export default function Week({ settings, days, today, wk, setWk, openDay }) {
   const itemRow = (it) => {
     let n = 0, t = 0
     const cells = dates.map((d) => {
-      if (!scheduled(settings, days, d).includes(it.id)) return <td key={d} className="dash">-</td>
+      if (!isOn(it, d)) return <td key={d} className="dash">-</td>
       if (blank(d)) return <td key={d} />
       const day = days[d]
       if (it.type === 'check') {
@@ -39,7 +40,7 @@ export default function Week({ settings, days, today, wk, setWk, openDay }) {
     const sc = counts(it)
     let c = 0, n = 0, t = 0
     const cells = dates.map((d) => {
-      if (!onDay(it, d)) return <td key={d} className="dash">-</td>
+      if (!isOn(it, d)) return <td key={d} className="dash">-</td>
       if (blank(d)) return <td key={d} />
       const day = days[d]
       const on = !!day?.toggles?.[it.id]

@@ -10,7 +10,7 @@ describe('저장소', () => {
     await store.saveSettings(s)
     expect((await store.getSettings()).startDate).toBe('2026-11-16')
 
-    const day = { date: '2026-11-17', scheduled: ['wake'], marks: {}, times: { wake: '07:20' }, toggles: {}, note: '' }
+    const day = { date: '2026-11-17', marks: {}, times: { wake: '07:20' }, toggles: {}, note: '' }
     await store.saveDay(day)
     expect(await store.getDay('2026-11-17')).toEqual(day)
     expect(await store.getDays('2026-11-16', '2026-11-18')).toHaveLength(1)
@@ -20,10 +20,17 @@ describe('저장소', () => {
     const backup = await store.exportAll()
     expect(store.isBackup(backup)).toBe(true)
 
-    const other = { ...backup, settings: { ...backup.settings, startDate: '2026-12-01' }, days: [{ date: '2026-12-01', scheduled: [], marks: {}, times: {}, toggles: {}, note: 'x' }] }
+    const other = { ...backup, settings: { ...backup.settings, startDate: '2026-12-01' }, days: [{ date: '2026-12-01', marks: {}, times: {}, toggles: {}, note: 'x' }] }
     await store.importAll(other)
     expect((await store.getSettings()).startDate).toBe('2026-12-01')
     expect((await store.getAllDays()).map((d) => d.date)).toEqual(['2026-12-01'])
+  })
+
+  it('예전 버전(1) 백업도 불러올 수 있다', async () => {
+    const backup = await store.exportAll()
+    expect(backup.version).toBe(2)
+    expect(store.isBackup({ ...backup, version: 1 })).toBe(true)
+    expect(store.isBackup({ ...backup, version: 3 })).toBe(false)
   })
 
   it('routine 백업이 아니면 불러오지 않는다', async () => {

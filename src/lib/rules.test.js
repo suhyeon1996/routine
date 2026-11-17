@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { nightMin, normHM, weekStart } from './dates.js'
-import { daySum, newDay, scheduled, timeOk, timeText, warnFor, weeksKept } from './rules.js'
+import { closeDay, daySum, itemsOn, migrateDay, newDay, pendingCloses, timeOk, timeText, warnFor, weeksKept } from './rules.js'
 
 // 테스트용 설정: 2026-11-16(월) 시작
 const settings = () => ({
@@ -14,7 +14,8 @@ const settings = () => ({
     { id: 'note', type: 'toggle', name: '기록만', days: [0, 1, 2, 3, 4, 5, 6], score: 'none' },
   ],
 })
-const day = (s, date, fn) => { const d = newDay(s, date); fn?.(d); return d }
+const day = (s, date, fn) => { const d = newDay(date); fn?.(d); return d }
+const ids = (list) => list.map((it) => it.id)
 
 describe('시간 입력', () => {
   it('여러 형식을 HH:MM으로 맞춘다', () => {
@@ -63,12 +64,53 @@ describe('하루 합계', () => {
     expect(daySum(s, {}, '2026-11-16').n).toBe(0)
     expect(daySum(s, { '2026-11-16': day(s, '2026-11-16') }, '2026-11-16').n).toBe(0)
   })
-  it('설정을 바꿔도 이미 기록한 날의 할 일 목록은 그대로', () => {
+})
+
+describe('그날 할 일 목록 (필드명:값 저장)', () => {
+  it('오늘은 기록이 있어도 지금 설정으로 계산: 새 항목이 바로 들어간다', () => {
     const s = settings()
-    const days = { '2026-11-16': day(s, '2026-11-16') }
-    s.items[1].slots[0].days = [2]
-    expect(scheduled(s, days, '2026-11-16')).toContain('run')
-    expect(scheduled(s, days, '2026-11-18')).not.toContain('run')
+    const days = { '2026-11-17': day(s, '2026-11-17', (d) => { d.marks.read = 'O' }) }
+    s.items.push({ id: 'getup', type: 'check', name: '침대 나가기', slots: [{ days: [2], time: '07:00', min: 5, note: '' }] })
+    expect(ids(itemsOn(s, days, '2026-11-17'))).toContain('getup')
+    expect(daySum(s, days, '2026-11-17').total).toBe(5)
+  })
+  it('마감하면 입력하지 않은 할 일이 빈 값으로 채워지고, 입력한 값은 그대로', () => {
+    const s = settings()
+    const d = closeDay(s, day(s, '2026-11-16', (x) => { x.marks.run = 'O' }), '2026-11-16')
+    expect(d.closed).toBe(true)
+    expect(d.marks).toEqual({ run: 'O', read: null })
+    expect(d.times).toEqual({ wake: null, bed: null })
+    expect(d.toggles).toEqual({ snack: false, note: false })
+  })
+  it('마감한 날은 설정을 바꿔도 목록이 그대로, 오늘 이후는 새 설정', () => {
+    const s = settings()
+    const days = { '2026-11-16': closeDay(s, undefined, '2026-11-16') }
+    s.items[1].slots[0].days = [2] // 운동을 월·수·금 → 화
+    expect(ids(itemsOn(s, days, '2026-11-16'))).toContain('run')
+    expect(ids(itemsOn(s, days, '2026-11-18'))).not.toContain('run')
+    expect(ids(itemsOn(s, days, '2026-11-17'))).toContain('run')
+  })
+  it('마감한 날: 입력 안 한 할 일은 빈칸으로 남아 합계 분모에 들어간다', () => {
+    const s = settings()
+    const days = { '2026-11-16': closeDay(s, day(s, '2026-11-16', (x) => { x.marks.run = 'O' }), '2026-11-16') }
+    expect(daySum(s, days, '2026-11-16')).toEqual({ n: 2, total: 5 }) // 운동 O + 야식 안 먹음
+  })
+  it('처음 쓴 날부터 어제까지 마감 안 한 날만 마감 (기록 없는 날 포함)', () => {
+    const s = settings()
+    const days = { '2026-11-16': closeDay(s, undefined, '2026-11-16'), '2026-11-17': day(s, '2026-11-17') }
+    expect(pendingCloses(s, days, '2026-11-19').map((d) => d.date)).toEqual(['2026-11-17', '2026-11-18'])
+  })
+  it('예전 형식(scheduled 목록)은 필드로 바꾼다', () => {
+    const s = settings()
+    const old = { date: '2026-11-17', scheduled: ['wake', 'read', 'bed'], marks: { read: 'O' }, times: {}, toggles: {}, note: '' }
+    const m = migrateDay(s, old, '2026-11-18')
+    expect(m.scheduled).toBeUndefined()
+    expect(m.closed).toBe(true)
+    expect(m.marks).toEqual({ read: 'O' })
+    expect(m.times).toEqual({ wake: null, bed: null })
+    expect(m.toggles).toEqual({ snack: false, note: false })
+    const todayOld = migrateDay(s, { ...old, date: '2026-11-18' }, '2026-11-18')
+    expect(todayOld.closed).toBeUndefined() // 오늘 기록은 마감하지 않음
   })
 })
 
