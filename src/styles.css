@@ -125,3 +125,4 @@ table.wk td.tot { font-size: 11px; color: var(--sub); }
 .sh-btns { display: flex; gap: 8px; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(0,0,0,.8); color: #fff; padding: 8px 14px; border-radius: 20px; font-size: 13px; opacity: 0; transition: .2s; pointer-events: none; white-space: nowrap; z-index: 6; }
 .toast.show { opacity: 1; }
+.takeout { border: 0; background: none; color: var(--accent); font-size: 12px; padding: 2px 0 0; cursor: pointer; }

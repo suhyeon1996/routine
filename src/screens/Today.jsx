@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addDays, fromMin, label, normHM, nowHM, toMin } from '../lib/dates.js'
-import { daySum, goalText, itemsOn, live, SCORE, slotFor, summary, timeOk, timeText, warnFor } from '../lib/rules.js'
+import { canTakeOut, daySum, goalText, itemsOn, live, putInDay, SCORE, slotFor, summary, takeOutOfDay, timeOk, timeText, warnFor } from '../lib/rules.js'
 import { useUI } from '../ui.jsx'
 
 const MARKS = [['O', 'O'], ['△', 'T'], ['X', 'X']]
@@ -14,6 +14,15 @@ export default function Today({ settings, days, today, date, setDate, updateDay 
   const off = live(settings).filter((it) => !items.includes(it))
   const s = daySum(settings, days, date)
   const isToday = date === today
+  const closed = !!d?.closed
+  const offLabel = isToday ? '오늘 없는 항목' : '이날 없는 항목'
+
+  // 끝난 날에 그날 할 일로 넣기 / 빼기
+  const replace = (fn) => updateDay(date, (x) => { const n = fn(x); Object.keys(x).forEach((k) => delete x[k]); Object.assign(x, n) })
+  const putIn = (it) => { replace((x) => putInDay(x, it)); ui.toast(`${it.name}을(를) 이날 할 일로 넣었어요`) }
+  const takeOut = (it) => { replace((x) => takeOutOfDay(x, it)); ui.toast(`${it.name}을(를) 이날 할 일에서 뺐어요`) }
+  const takeOutBtn = (it) => closed && canTakeOut(d, it)
+    ? <button className="takeout" onClick={() => takeOut(it)}>이날에서 빼기</button> : null
 
   // 지울 때는 필드를 없애지 않고 빈 값으로 둔다 (끝난 날의 할 일 목록이 유지되도록)
   const mark = (id, v) => updateDay(date, (x) => { x.marks[id] = x.marks[id] === v ? null : v })
@@ -45,21 +54,23 @@ export default function Today({ settings, days, today, date, setDate, updateDay 
       <div className="sec total"><span>{isToday ? '오늘' : '이날'} 합계</span><span>{s.n} / {s.total}</span></div>
 
       <div className="sec ls">
-        {items.length === 0 && <div className="lr"><div className="tx muted">오늘 할 일이 없어요</div></div>}
+        {items.length === 0 && <div className="lr"><div className="tx muted">{isToday ? '오늘' : '이날'} 할 일이 없어요</div></div>}
         {items.map((it) => it.type === 'check'
-          ? <CheckRow key={it.id} it={it} date={date} value={d?.marks?.[it.id]} onMark={(v) => mark(it.id, v)} />
+          ? <CheckRow key={it.id} it={it} date={date} value={d?.marks?.[it.id]} onMark={(v) => mark(it.id, v)} extra={takeOutBtn(it)} />
           : it.type === 'time'
-            ? <TimeRow key={it.id} it={it} value={d?.times?.[it.id]} onPress={() => pressTime(it)} />
-            : <ToggleRow key={it.id} it={it} on={!!d?.toggles?.[it.id]} onToggle={() => toggle(it.id)} />)}
+            ? <TimeRow key={it.id} it={it} value={d?.times?.[it.id]} onPress={() => pressTime(it)} extra={takeOutBtn(it)} />
+            : <ToggleRow key={it.id} it={it} on={!!d?.toggles?.[it.id]} onToggle={() => toggle(it.id)} extra={takeOutBtn(it)} />)}
         {off.length > 0 && (
           <button className="more" onClick={() => setShowOff(!showOff)}>
-            {showOff ? '오늘 없는 항목 접기' : `오늘 없는 항목 ${off.length}개 보기`}
+            {showOff ? `${offLabel} 접기` : `${offLabel} ${off.length}개 보기`}
           </button>
         )}
         {showOff && off.map((it) => (
-          <div key={it.id} className="lr off">
+          <div key={it.id} className={`lr ${closed ? '' : 'off'}`}>
             <div className="tx"><div className="tt">{it.name}</div><div className="sub">{summary(it)}</div></div>
-            <span className="muted">-</span>
+            {closed
+              ? <button className="restore" onClick={() => putIn(it)}>이날 할 일로 넣기</button>
+              : <span className="muted">-</span>}
           </div>
         ))}
       </div>
@@ -73,7 +84,7 @@ export default function Today({ settings, days, today, date, setDate, updateDay 
   )
 }
 
-function CheckRow({ it, date, value, onMark }) {
+function CheckRow({ it, date, value, onMark, extra }) {
   const sl = slotFor(it, date) || {}
   const end = sl.time && sl.min ? fromMin(toMin(sl.time) + sl.min) : ''
   return (
@@ -84,7 +95,7 @@ function CheckRow({ it, date, value, onMark }) {
           {sl.min ? <span className="du">({sl.min}분)</span> : null}
           {it.name}{it.archived && <span className="del">(삭제)</span>}
         </div>
-        <div className="sub">{sl.note}{sl.note && end ? ' · ' : ''}{end ? `${sl.time}~${end}` : ''}</div>
+        <div className="sub">{sl.note}{sl.note && end ? ' · ' : ''}{end ? `${sl.time}~${end}` : ''}</div>{extra}
       </div>
       <div className="btns">
         {MARKS.map(([m, c]) => (
@@ -95,11 +106,11 @@ function CheckRow({ it, date, value, onMark }) {
   )
 }
 
-function TimeRow({ it, value, onPress }) {
+function TimeRow({ it, value, onPress, extra }) {
   const ok = timeOk(it, value)
   return (
     <div className="lr">
-      <div className="tx"><div className="tt">{it.name}{it.archived && <span className="del">(삭제)</span>}</div><div className="sub">{goalText(it)}</div></div>
+      <div className="tx"><div className="tt">{it.name}{it.archived && <span className="del">(삭제)</span>}</div><div className="sub">{goalText(it)}</div>{extra}</div>
       <button className={`tmb ${value ? 'set' : ''}`} onClick={onPress}>
         {value ? <>{timeText(it, value)}{ok !== null && <span className={ok ? 'ok' : 'bad'}>{ok ? '✓' : '✗'}</span>}</> : '눌러서 입력'}
       </button>
@@ -107,10 +118,10 @@ function TimeRow({ it, value, onPress }) {
   )
 }
 
-function ToggleRow({ it, on, onToggle }) {
+function ToggleRow({ it, on, onToggle, extra }) {
   return (
     <div className="lr">
-      <div className="tx"><div className="tt">{it.name}{it.archived && <span className="del">(삭제)</span>}</div><div className="sub">{SCORE[it.score || 'none']}</div></div>
+      <div className="tx"><div className="tt">{it.name}{it.archived && <span className="del">(삭제)</span>}</div><div className="sub">{SCORE[it.score || 'none']}</div>{extra}</div>
       <button className={`tg ${on ? 'on' : ''} ${it.score === 'off' ? 'neg' : ''}`}
         onClick={onToggle} role="switch" aria-checked={on} aria-label={it.name} />
     </div>

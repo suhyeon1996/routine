@@ -40,6 +40,25 @@ export function itemsOn(settings, days, date) {
   return settings.items.filter((it) => (!it.archived && onDay(it, date)) || hasValue(d, it))
 }
 
+// 끝난 날에 항목을 그날 할 일로 넣기 / 빼기 (사용자가 직접. 넣은 것은 added에 적어 두고, 값이 없을 때만 뺄 수 있다)
+export function putInDay(day, it) {
+  const d = structuredClone(day)
+  const f = FIELD[it.type]
+  d[f] = d[f] || {}
+  if (!(it.id in d[f])) d[f][it.id] = it.type === 'toggle' ? false : null
+  d.added = [...new Set([...(d.added || []), it.id])]
+  return d
+}
+export const canTakeOut = (day, it) => !!day?.added?.includes(it.id) && !hasValue(day, it)
+export function takeOutOfDay(day, it) {
+  if (!canTakeOut(day, it)) return day
+  const d = structuredClone(day)
+  delete d[FIELD[it.type]][it.id]
+  d.added = d.added.filter((id) => id !== it.id)
+  if (!d.added.length) delete d.added
+  return d
+}
+
 // 이름이 같은 삭제한 항목 (다시 등록할 때 되살리기용)
 export const archivedByName = (settings, name) =>
   settings.items.find((it) => it.archived && it.name.trim() === name.trim())

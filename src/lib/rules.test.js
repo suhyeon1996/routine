@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { nightMin, normHM, weekStart } from './dates.js'
-import { archivedByName, closeDay, daySum, itemsOn, migrateDay, newDay, pendingCloses, timeOk, timeText, warnFor, weeksKept } from './rules.js'
+import { archivedByName, canTakeOut, closeDay, daySum, itemsOn, putInDay, takeOutOfDay, migrateDay, newDay, pendingCloses, timeOk, timeText, warnFor, weeksKept } from './rules.js'
 
 // 테스트용 설정: 2026-11-16(월) 시작
 const settings = () => ({
@@ -124,6 +124,24 @@ describe('그날 할 일 목록 (필드명:값 저장)', () => {
     delete s.items[1].archived
     expect(ids(itemsOn(s, {}, '2026-11-18'))).toContain('run')
     expect(archivedByName(s, '운동')).toBeUndefined()
+  })
+  it('끝난 날에 새 항목을 이날 할 일로 넣으면 목록과 합계에 들어가고, 값이 없을 때만 뺄 수 있다', () => {
+    const s = settings()
+    const days = { '2026-11-17': closeDay(s, day(s, '2026-11-17', (x) => { x.marks.read = 'O' }), '2026-11-17') }
+    const getup = { id: 'getup', type: 'check', name: '침대 나가기', slots: [{ days: [0, 1, 2, 3, 4, 5, 6], time: '07:00', min: 5, note: '' }] }
+    s.items.push(getup)
+    expect(ids(itemsOn(s, days, '2026-11-17'))).not.toContain('getup') // 오늘 추가해도 어제는 그대로
+    days['2026-11-17'] = putInDay(days['2026-11-17'], getup)
+    expect(ids(itemsOn(s, days, '2026-11-17'))).toContain('getup')
+    expect(daySum(s, days, '2026-11-17').total).toBe(5)
+    expect(canTakeOut(days['2026-11-17'], getup)).toBe(true)
+    expect(canTakeOut(days['2026-11-17'], s.items[2])).toBe(false) // 원래 할 일(독서)은 못 뺌
+    days['2026-11-17'].marks.getup = 'O'
+    expect(canTakeOut(days['2026-11-17'], getup)).toBe(false) // 값을 넣으면 못 뺌
+    days['2026-11-17'].marks.getup = null
+    const out = takeOutOfDay(days['2026-11-17'], getup)
+    expect(ids(itemsOn(s, { '2026-11-17': out }, '2026-11-17'))).not.toContain('getup')
+    expect(out.added).toBeUndefined()
   })
   it('예전 형식(scheduled 목록)은 필드로 바꾼다', () => {
     const s = settings()
